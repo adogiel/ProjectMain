@@ -4,9 +4,13 @@ Due to GitHub file size limitations, the original dataset and trained model file
 
 ACCESSING THE DATA
 
-All necessary data and model files can be downloaded from the original authors' Zenodo repository:
+Original dataset and model files can be downloaded from the original authors' Zenodo repository:
 
 https://zenodo.org/record/5748084
+
+Articles from The Guardian can be downloaded from Google Drive: 
+
+https://drive.google.com/drive/folders/1nMe8RpUMsOdOIVTg_IVHTjMe7-Y6D5Yc?usp=sharing
 
 LOCAL SETUP
 
