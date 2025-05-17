@@ -1,81 +1,71 @@
 
-# Emotion and Reason in Political LanguageL: Replication Package
+# BASED ON: Emotion and Reason in Political LanguageL: Replication Package
 # Gennaro and Ash
 
-# Description:
-# - Find absolute frequencies of vocabulary words in corpus
-# - Find absolute frequencies of affect and cognition words in corpus
-# - Find SIF frequencies across all corpus
-
-
-###################################
-#     Modules                   ###
-###################################
+# ===============================================
+# MODIFIED FOR MASTER'S PROJECT - GUARDIAN DATA
+# Description: Count word frequencies and compute
+#              weighted (SIF-style) frequencies.
+# ===============================================
 
 import os
 import joblib
 from collections import Counter
 
+###################################
+# Setup paths                    ##
+###################################
+
+# Get current script dir and repo root
+script_dir = os.path.dirname(__file__)
+project_root = os.path.abspath(os.path.join(script_dir, '..', '..', '..'))
+
+# Input folder: preprocessed data
+data_path = os.path.join(project_root, 'data')
+
+# Output folder
+output_path = os.path.join(project_root, 'data', 'word_frequencies')
+os.makedirs(output_path, exist_ok=True)
+
+# Files to process
+DATI = [
+    'rawarticles_indexed1_n_temp.pkl',
+    'rawarticles_indexed2_n_temp.pkl',
+    'rawarticles_indexed3_n_temp.pkl',
+    'rawarticles_indexed4_n_temp.pkl'
+]
 
 ###################################
-#     Working Directory         ###
+# Count word frequencies         ##
 ###################################
 
-data_c = './data'
-wd_dir = './data/word_frequencies/'
+def find_frequencies(file_path):
+    data = joblib.load(file_path)
+    all_words = [word for row in data for word in row[1]]
+    return Counter(all_words)
 
-####################
-#   Word counts   ##
-####################
+total_freqs = Counter()
+for fname in DATI:
+    path = os.path.join(data_path, fname)
+    counts = find_frequencies(path)
+    total_freqs.update(counts)
 
-DATI = ['rawspeeches_indexed1_n_temp.pkl', 'rawspeeches_indexed2_n_temp.pkl',
-        'rawspeeches_indexed3_n_temp.pkl', 'rawspeeches_indexed4_n_temp.pkl']
+# Save absolute frequencies
+joblib.dump(total_freqs, os.path.join(output_path, 'word_counts.pkl'))
+print(f"Saved absolute frequencies. Vocabulary size: {len(total_freqs)}")
 
-def find_frequencies(dataset_name):
-	data = joblib.load(dataset_name)
-	data = [a[1] for a in data]
-	data = [a for b in data for a in b]
-	data = Counter(data)
-
-os.chdir(data_c)
-
-freqs = Counter()
-for dataset_name in DATI:
-	temp = find_frequencies(dataset_name)
-	freqs = sum([freqs, temp], Counter())
-
-joblib.dump(freqs, wd_dir + 'word_counts.pkl')
-
-
-###############################
-#   Count dictionary words   ##
-###############################
-
-# Counts for dictionary words
-affect = joblib.load('dictionary_affect.pkl')
-cognition = joblib.load('dictionary_cognition.pkl')
-
-a = [[i, freqs[i]] for i in affect]
-c = [[i, freqs[i]] for i in cognition]a = sorted(a, key = lambda x: x[1], reverse=True)
-c = sorted(c, key = lambda x: x[1], reverse=True)a = [[i[0], '(' + str(i[1])+'),'] for i in a]
-c = [[i[0], '(' + str(i[1])+'),'] for i in c]a1 = ' '.join(str(r) for v in a for r in v)
-c1 = ' '.join(str(r) for v in c for r in v)os.chdir(results)
-
-with open(wd_dir + "affect_words.txt", "w") as output:
-    output.write(str(a1))
- 
-with open(wd_dir + "cog_words.txt", "w") as output:
-    output.write(str(c1))
-
-
-#########################
-#   Weightes Frequences #
-#########################
-
-l = sum(freqs.values())
+###################################
+# Compute weighted frequencies   ##
+# SIF-style: a / (a + freq / total)
+###################################
 
 a = 0.001
-for key in freqs.keys():
-    freqs[key] = a / (a + (freqs[key] / l))
+total_count = sum(total_freqs.values())
+weighted_freqs = {
+    word: a / (a + (count / total_count))
+    for word, count in total_freqs.items()
+}
 
-joblib.dump(freqs, wd_dir + 'word_freqs.pkl')
+# Save weighted frequencies
+joblib.dump(weighted_freqs, os.path.join(output_path, 'word_freqs.pkl'))
+print("Saved weighted frequencies.")

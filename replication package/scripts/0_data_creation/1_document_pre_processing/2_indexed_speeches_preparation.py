@@ -1,98 +1,99 @@
-
-# Emotion and Reason in Political LanguageL: Replication Package
+# BASED ON: Emotion and Reason in Political LanguageL: Replication Package
 # Gennaro and Ash
 
-# Description:
-# - Text preprocessing
-
-# NB: currently set up to work on 4 cores
-
-###################################
-#     Modules                   ###
-###################################
+# ===============================================
+# MODIFIED FOR MASTER'S PROJECT - GUARDIAN DATA
+# Description: Preprocesses cleaned Guardian texts:
+#              tokenization, stemming, POS tagging,
+#              stopword removal.
+# ===============================================
 
 import os
 import joblib
 from string import punctuation
-translator = str.maketrans('', '', punctuation)
 import gensim
 import nltk
-tagger = nltk.perceptron.PerceptronTagger()
 from nltk.stem.snowball import SnowballStemmer
-stemmer = SnowballStemmer("english")
+from nltk import download
 from multiprocessing import Pool, freeze_support
+from nltk.corpus import stopwords
+nltk.download('stopwords')
+
+# Download required models if not available
+nltk.download('averaged_perceptron_tagger_eng')
+
+######################
+# Setup paths       ##
+######################
+
+# Get current script directory
+script_dir = os.path.dirname(__file__)
+project_root = os.path.abspath(os.path.join(script_dir, '..', '..', '..'))
+
+# Input/output directories
+data_path = os.path.join(project_root, 'data')
+
+# Filenames to process
+DATI = [
+    'rawarticles_indexed1_n.pkl',
+    'rawarticles_indexed2_n.pkl',
+    'rawarticles_indexed3_n.pkl',
+    'rawarticles_indexed4_n.pkl'
+]
+
+DATI = [[os.path.join(data_path, fname)] for fname in DATI]
 
 ###################################
-#     Working Directory         ###
+# Preprocessing functions        ##
 ###################################
 
-data_c = './data'
+translator = str.maketrans('', '', punctuation)
+stemmer = SnowballStemmer("english")
+tagger = nltk.perceptron.PerceptronTagger()
 
-###################################
-#   Parameters                  ###
-###################################
-
-DATI = ['rawspeeches_indexed1_n.pkl', 'rawspeeches_indexed2_n.pkl',
-        'rawspeeches_indexed3_n.pkl', 'rawspeeches_indexed4_n.pkl']
-
-###################################
-#   Functions                   ###
-###################################
-
+# Remove punctuation
 def pro1(lista):
-    a = [[row[0], row[1].translate(translator)] for row in lista]
-    return a
+    return [[row[0], row[1].translate(translator), row[2]] for row in lista]
 
-# Tokenize etc
+# Tokenize
 def pro2(lista):
-    a = [[row[0], gensim.utils.simple_preprocess(row[1])] for row in lista]
-    return a
+    return [[row[0], gensim.utils.simple_preprocess(row[1]), row[2]] for row in lista]
 
-# Eliminate digits
+# Remove digits
 def pro3(lista):
-    a = [[row[0], [w for w in row[1] if not w.isdigit()]] for row in lista]
-    return a
+    return [[row[0], [w for w in row[1] if not w.isdigit()], row[2]] for row in lista]
 
-# Drop words that are too short
+# Remove short words (<=2 chars)
 def pro4(lista):
-    a = [[row[0], [w for w in row[1] if len(w)>2]] for row in lista]
-    return a
+    return [[row[0], [w for w in row[1] if len(w) > 2], row[2]] for row in lista]
 
-# Tag parts of speech and keep only some
+# Keep only nouns, verbs, adjectives
 def tags(lista):
-    t = [[row[0], tagger.tag(row[1])] for row in lista]
-    t = [[row[0], [i[0] for i in row[1] if i[1].startswith(('N', 'V', 'J'))]] for row in t]
-    return t
+    tagged = [[row[0], nltk.pos_tag(row[1]), row[2]] for row in lista]
+    filtered = [
+        [row[0], [w for w, tag in row[1] if tag.startswith(('N', 'V', 'J'))], row[2]]
+        for row in tagged
+    ]
+    return filtered
 
-# Stem
+# Stemming
 def pro5(lista):
-    a = [[row[0], [stemmer.stem(word) for word in row[1]]] for row in lista]
-    return a
+    return [[row[0], [stemmer.stem(word) for word in row[1]], row[2]] for row in lista]
 
-# Eliminate Stopwords
-os.chdir(data_c)
-stopwords = joblib.load('stopwords_n.pkl')
-proc = joblib.load('procedural_words.pkl')
-stopwords = set(stopwords).union(proc)
-del proc
+# CHANGE: Using NLTK built-in English stopwords only & procedural words skipped
+# Remove stopwords
+all_stopwords = set(stopwords.words('english'))
+
 def pro6(lista):
-    for i in range(len(lista)):
-        x = lista[i][0]
-        y = lista[i][1]
-        y = [w for w in y if w not in stopwords]
-        lista[i] = [x, y]
-    return lista
+    return [[row[0], [w for w in row[1] if w not in all_stopwords], row[2]] for row in lista]
 
-# Drop empty speeches
+# Remove empty processed texts
 def dropnull(lista):
-    a = [row for row in lista if len(' '.join(row[1]))>0]
-    return a
-
+    return [row for row in lista if len(row[1]) > 0]
 
 ###################################
-#   Main                       ###
+# Main function                  ##
 ###################################
-
 
 def preprocessing(data_name):
     data = joblib.load(data_name)
@@ -104,16 +105,13 @@ def preprocessing(data_name):
     data = pro5(data)
     data = pro6(data)
     data = dropnull(data)
-    lab = data_name.replace('.pkl', '') + '_temp.pkl'
-    joblib.dump(data, lab)
 
+    output_name = data_name.replace('.pkl', '_temp.pkl')
+    joblib.dump(data, output_name)
 
 ###################################
-#      Multiprocessing          ###
+# Run with multiprocessing       ##
 ###################################
-
-DATI = [[a] for a in DATI]
-os.chdir(data_c)
 
 def main():
     with Pool(4) as pool:
