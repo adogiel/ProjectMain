@@ -1,89 +1,96 @@
-# Emotion and Reason in Political LanguageL: Replication Package
-# Gennaro and Ash
-
+# ===============================================
+# BASED ON: Emotion and Reason in Political Language Replication Package
+# ADAPTED FOR MASTER'S PROJECT - GUARDIAN DATA
 # Description:
-# - Extract sentences from the corpus
-
-###################################
-#     Modules                   ###
-###################################
-
+# - Extract clean, POS-filtered sentences from articles
+# ===============================================
 
 import os
-import gensim
-from gensim.summarization.textcleaner import get_sentences
-from random import shuffle
-import nltk
-tagger = nltk.perceptron.PerceptronTagger()
 import joblib
+import nltk
+from nltk import pos_tag
+from nltk.tokenize import sent_tokenize
 from nltk.stem.snowball import SnowballStemmer
+from random import shuffle
+from nltk.tokenize import sent_tokenize
+from multiprocessing import Pool, freeze_support
+
+# Ensure NLTK models are available
+nltk.download('punkt')
+nltk.download('averaged_perceptron_tagger')
+
+# ===============================================
+# Paths
+# ===============================================
+
+script_dir = os.path.dirname(__file__)
+project_root = os.path.abspath(os.path.join(script_dir, '..', '..', '..'))
+data_path = os.path.join(project_root, 'data')
+
+# Load stopwords and word frequencies
+stopwords = joblib.load(os.path.join(data_path, 'stopwords.pkl'))
+word_counts = joblib.load(os.path.join(data_path, 'word_frequencies', 'word_counts.pkl'))
+
 stemmer = SnowballStemmer("english")
 
+# ===============================================
+# Sentence extraction function
+# ===============================================
 
-###################################
-#     Working Directory         ###
-###################################
-
-data_c = './data'
-
-
-# Upload ressources
-os.chdir(data_c)
-stopwords = joblib.load('stopwords.pkl')
-count = joblib.load('word_counts.pkl')
-
-
-###################################
-#     Extract senmtences        ###
-###################################
-
-def extract_sentences(dataname):
-    data = joblib.load(dataname)
-    data = [a[1] for a in data]  # keep only text, no title
+def extract_sentences(file_path):
+    print(f"🔹 Processing: {os.path.basename(file_path)}")
+    
+    data = joblib.load(file_path)
+    texts = [row[1] for row in data]  # Get tokenized article texts
 
     sentences = []
-    for doc in data:
-        sentences += get_sentences(doc)
+    for tokens in texts:
+        # Reconstruct sentence from tokens
+        text_str = ' '.join(tokens)
+        doc_sentences = sent_tokenize(text_str)
+        sentences.extend(doc_sentences)
 
-    sentences = [item for item in sentences if len(item.split()) > 1]  # drop empty
-    sentences = [gensim.utils.simple_preprocess(item) for item in sentences]
+    # Clean and filter
+    sentences = [s for s in sentences if len(s.split()) > 1]
+    sentences = [simple_preprocess(s) for s in sentences]
+    sentences = [[w for w in s if not w.isdigit()] for s in sentences]
+    sentences = [[w for w in s if len(w) > 2] for s in sentences]
 
-    sentences = [[a for a in s if not a.isdigit()] for s in sentences]  # drop digits
-    sentences = [[a for a in s if len(a) > 2] for s in sentences]  # drop too short
-    
-    sentences = [tagger.tag(s) for s in sentences]
-    sentences = [[i[0] for i in s if i[1].startswith(('N', 'V', 'J'))] for s in sentences]
-    
-    sentences = [[stemmer.stem(i) for i in s] for s in sentences]
-    sentences = [[a for a in b if a not in stopwords] for b in sentences]
-    sentences = [[a for a in b if count[a] >= 10] for b in sentences]
+    # POS tagging: keep nouns, verbs, adjectives
+    sentences = [pos_tag(s) for s in sentences]
+    sentences = [[w for w, tag in s if tag.startswith(('N', 'V', 'J'))] for s in sentences]
 
-    sentences = [a for a in data if len(a)>1]  # eliminate empty ones
+    # Stemming
+    sentences = [[stemmer.stem(w) for w in s] for s in sentences]
+
+    # Remove stopwords and rare words
+    sentences = [[w for w in s if w not in stopwords] for s in sentences]
+    sentences = [[w for w in s if word_counts.get(w, 0) >= 10] for s in sentences]
+
+    # Drop empty sentences
+    sentences = [s for s in sentences if len(s) > 1]
     shuffle(sentences)
 
-    lab = dataname.replace('rawspeeches_', 'sentences_')
-    print('{} processed'.format(dataname))
-    joblib.dump(sentences, lab)
-    print('{} saved'.format(lab))
+    # Save
+    output_path = file_path.replace('_clean.pkl', '_sentences.pkl')
+    joblib.dump(sentences, output_path)
+    print(f"✅ Saved: {os.path.basename(output_path)} ({len(sentences)} sentences)")
 
-
-
-###################################
-#      Multiprocessing          ###
-###################################
-
-# Upload speeches
-DATI = ['rawspeeches_indexed1.pkl', 'rawspeeches_indexed2.pkl',
-        'rawspeeches_indexed3.pkl', 'rawspeeches_indexed4.pkl']
-
-DATI = [[a] for a in DATI]
-os.chdir(data_c)
-
-def main():
-    with Pool(4) as pool:
-        pool.starmap(extract_sentences, DATI)
+# ===============================================
+# Run with multiprocessing
+# ===============================================
 
 if __name__ == "__main__":
     freeze_support()
-    main()
 
+    files = [
+        'rawarticles_indexed1_n_clean.pkl',
+        'rawarticles_indexed2_n_clean.pkl',
+        'rawarticles_indexed3_n_clean.pkl',
+        'rawarticles_indexed4_n_clean.pkl'
+    ]
+
+    full_paths = [[os.path.join(data_path, f)] for f in files]
+
+    with Pool(4) as pool:
+        pool.starmap(extract_sentences, full_paths)

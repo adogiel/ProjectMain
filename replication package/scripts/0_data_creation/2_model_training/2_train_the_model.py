@@ -1,52 +1,68 @@
-# Emotion and Reason in Political LanguageL: Replication Package
-# Gennaro and Ash
-
+# ===============================================
+# BASED ON: Emotion and Reason in Political Language Replication Package
+# ADAPTED FOR MASTER'S PROJECT - GUARDIAN DATA
 # Description:
-# - Model training
-
-
-###################################
-#     Modules                   ###
-###################################
+# - Train Word2Vec model on sentence-level Guardian data
+# ===============================================
 
 import os
 import joblib
 from gensim.models import Word2Vec
 
+# ===============================================
+# Paths
+# ===============================================
 
-wd_data = './data'
-wd_model = './models/'
+# Locate script and define paths
+script_dir = os.path.dirname(__file__)
+project_root = os.path.abspath(os.path.join(script_dir, '..', '..', '..'))
+data_dir = os.path.join(project_root, 'data')
+model_dir = os.path.join(project_root, 'models')
+os.makedirs(model_dir, exist_ok=True)
 
+# Sentence files (Guardian-based)
+sentence_files = [
+    'rawarticles_indexed1_n_sentences.pkl',
+    'rawarticles_indexed2_n_sentences.pkl',
+    'rawarticles_indexed3_n_sentences.pkl',
+    'rawarticles_indexed4_n_sentences.pkl'
+]
 
-###################################
-#     Upload speeches           ###
-###################################
+# Full paths
+sentence_paths = [os.path.join(data_dir, fname) for fname in sentence_files]
 
-os.chdir(wd_data)
+# ===============================================
+# Load sentence data
+# ===============================================
 
-DATI = ['sentences_indexed1.pkl', 'sentences_indexed2.pkl',
-        'sentences_indexed3.pkl', 'sentences_indexed4.pkl']
+all_sentences = []
 
-dataset = []
-for dataname in DATI:
-	data = joblib.load(dataname)
-	dataset.append(data)
+for path in sentence_paths:
+    print(f"Loading: {os.path.basename(path)}")
+    data = joblib.load(path)
+    all_sentences.extend(data)  # Flatten to single list of sentences
 
-###################################
-#    Model training             ###
-###################################
+print(f"✅ Total sentences loaded: {len(all_sentences)}")
 
-w2v = Word2Vec(dataset,  # iterator that loops over tokenized sentences
-               workers=8,  # Number of threads to run in parallel
-               size=300,  # Word vector dimensionality
-               min_count=10,  # Minimum word count
-               window = 8, # Context window size - how many words to use as a context
-               sample = 1e-3, # Downsample setting for frequent words
-               iter = 10 # epochs
-               )
+# ===============================================
+# Train Word2Vec model
+# ===============================================
 
-w2v.init_sims(replace=True)
+print("🚀 Training Word2Vec model...")
+w2v_model = Word2Vec(
+    sentences=all_sentences,
+    vector_size=300,     # Size of word vectors
+    window=8,            # Context window size
+    min_count=10,        # Ignore words with freq < 10
+    workers=4,           # Parallelism
+    sample=1e-3,         # Subsampling frequent words
+    epochs=10            # Training epochs
+)
 
-# Save
-w2v.save(wd_model + 'w2v-vectors_8_300.pkl')
+# ===============================================
+# Save model
+# ===============================================
 
+model_path = os.path.join(model_dir, 'guardian_w2v_8_300.model')
+w2v_model.save(model_path)
+print(f"✅ Word2Vec model saved at: {model_path}")
